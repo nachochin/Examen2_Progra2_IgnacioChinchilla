@@ -1,0 +1,1172 @@
+
+Buenas tardes, hoy haremos un examen con NetBeans 21 con Java with ant. 
+Es para un sistema de parqueo publico. Aplicando arquitectura por capas, persistencia en archivos, versionamiento y uso controlado de IA. Se requiere un sistema básico para administrar un parqueo público donde se registran vehículos, su entrada, salida y cálculo de cobro.
+Interfaz: Swing (JFrame, JTable, formularios)
+Nada de: Consola (System.out) Ni JOptionPane
+
+Funciones minimas:
+1.Registro entrada:
+
+    Placa del vehículo: 
+    Tipo (carro, moto)
+    Hora de entrada (automática)*
+2. Registro  salida:
+    Selección del vehículo
+    Hora de salida (automática)*
+    Cálculo del monto a pagar (500 por hora)
+*Se puede hacer uso de: import jav.time.LocalTime;
+
+3. Visualización
+
+    Tabla con vehículos actualmente en el parqueo
+    Tabla con historial de vehículos
+4. Eliminación 
+	Eliminar registros históricos
+
+Reglas a seguir.
+
+    1. Control de unicidad de ingreso:
+    No se permitirá el registro de ingreso de un vehículo cuya placa ya se encuentre activa dentro del parqueo (sin registro de salida).
+    2. Cálculo de cobro por tiempo:
+    El monto a pagar deberá calcularse en función de la diferencia entre la hora de entrada y la hora de salida, aplicando la tarifa definida por hora o fracción. Tarifa 500 colones la hora
+    3. Validación de datos obligatorios:
+    Todos los campos requeridos (placa, tipo de vehículo, etc.) deben ser validados antes de procesar cualquier operación. No se deben permitir valores nulos, vacíos o inconsistentes. Para la placa, puede ser 6 números o alfanumérica donde solo los 3 primeros siempre son letras y los 3 últimos siempre son números.
+
+Arquitectura del proyecto
+Presentación. Class: App -> Interfaz grafica Swing (JFrame, JTable, formularios)
+Lógica de negocio: Validaciones (Usar regla 3 como guia)
+Acceso a Datos: Se maneja en un .txt llamado Archivos.txt.
+Entidades: Clases (Vehiculos, Registro)
+
+Reglas de la arquitectura.
+1. Restricciones de dependencia en capas
+	a. La capa de presentación solo interactua con: Capa de negocio y Entidades. No tiene permitido el acceso directo desde Presentación hacia Acceso a Datos.
+	b. Aislamiento de Acceso a Datos: No debe tener conocimiento de la capa de Presentación y no debe interactuar con interfaces gráficas
+	c. Flujo del código:
+	Presentación -> Lógica -> Acceso a Datos
+			Lógica -> Entidades
+	d. Encapsulamiento de la lógica. Toda validación, reglas de negocio y cálculos deben implementarse en la capa de Lógica de Negocio, no en la interfaz.
+
+Tenemos en capa de acceso a datos:
+CrearArchivo.java.
+package AccesoADatos;
+/**
+ *
+ * @author Ignacio CH
+ */
+import AccesoADatos.Registro;
+import java.io.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public class CrearArchivo {
+
+    // Nombre del archivo que actúa como base de datos
+    private static final String ARCHIVO = "Archivos.txt";
+    // Separador de campos dentro de cada línea del archivo
+    private static final String SEPARADOR = ";";
+    public void guardarTodos(List<Registro> productos) {
+        // List utiliza todos los atributos de la entidad de Inventario. ID, nombre, cantidad y Precio
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(ARCHIVO, false))) {
+            for (Registro p : productos) {
+                // Formato de cada línea: id;nombre;cantidad;precio
+                bw.write(p.getTipo() + SEPARADOR
+                        + p.getPlaca() + SEPARADOR);
+                bw.newLine();
+            }
+        } catch (IOException e) {
+            System.out.println("Error al guardar archivo: " + e.getMessage());
+        }
+    }
+
+    // ── Lee el archivo y devuelve la lista de productos ──────────────────────
+    public List<Registro> leerTodos() {
+        List<Registro> lista = new ArrayList<>();
+        File archivo = new File(ARCHIVO);
+
+        // Si el archivo no existe aún, devuelve lista vacía sin error
+        if (!archivo.exists()) {
+            return lista;
+        }
+
+        try (BufferedReader br = new BufferedReader(new FileReader(ARCHIVO))) {
+            String linea;
+            while ((linea = br.readLine()) != null) {
+                // Ignorar líneas vacías o corruptas
+                if (linea.trim().isEmpty()) continue;
+
+                String[] partes = linea.split(SEPARADOR);
+                if (partes.length == 4) {
+                    int id         = Integer.parseInt(partes[0]);
+                    String nombre  = partes[1];
+                    int cantidad   = Integer.parseInt(partes[2]);
+                    double precio  = Double.parseDouble(partes[3]);
+                    lista.add(new Registro(placa, tipo));
+                }
+            }
+        } catch (IOException e) {
+            System.out.println("Error al leer archivo: " + e.getMessage());
+        }
+        return lista;
+    }
+} // fin clase CrearFile
+
+Registro.java
+
+
+package AccesoADatos;
+/**
+ *
+ * @author IgnacioCH
+ */
+public class Registro {
+
+    private String tipo, placa;
+
+    
+    public Registro(String tipo, String placa){
+        this.placa = placa;
+        this.tipo = tipo;
+    }// fin constructor
+
+    // Setters
+    public void setTipo(String tipo) {
+        this.tipo = tipo;
+    }
+
+    public void setPlaca (String placa) {
+        this.placa = placa;  
+    }
+
+    
+    
+    //Getters
+
+    public String getTipo() {
+        return tipo;
+    }
+
+    public String getPlaca() {
+        return placa;
+    }
+
+    
+    
+}//fin clase registro
+
+
+
+Vamos a crear el proceso inicial en lógica de datos. luego vamos con las demás capas.
+
+Salida: 
+
+
+
+
+Antes de escribir código, analizo el estado actual y lo que se necesita construir.
+Lo que ya existe (Acceso a Datos):
+
+Registro.java — entidad con solo tipo y placa. Necesita ampliarse para el parqueo.
+CrearArchivo.java — desincronizado: lee 4 campos pero escribe 2, y usa lógica de un inventario anterior. Necesita reescribirse para el sistema de parqueo.
+
+Plan para la capa de Lógica (lo que haremos ahora):
+
+Vehiculo.java (Entidades) — entidad completa con placa, tipo, hora entrada, hora salida, monto.
+CrearArchivo.java (Acceso a Datos) — corregido para el parqueo: guarda/lee los 5 campos reales.
+GestionParqueo.java (Lógica) — toda la lógica de negocio: validar placa, registrar entrada/salida, calcular cobro, unicidad, eliminar historial.
+
+Empecemos:
+package Entidades;
+
+import java.time.LocalTime;
+
+/**
+ * Entidad que representa un vehículo registrado en el parqueo.
+ * @author Ignacio CH
+ */
+public class Vehiculo {
+
+    private String placa;
+    private String tipo;          // "Carro" o "Moto"
+    private LocalTime horaEntrada;
+    private LocalTime horaSalida; // null si aún está en el parqueo
+    private double monto;         // 0.0 si aún no ha salido
+
+    // Constructor entrada (vehículo que ingresa)
+    public Vehiculo(String placa, String tipo, LocalTime horaEntrada) {
+        this.placa       = placa;
+        this.tipo        = tipo;
+        this.horaEntrada = horaEntrada;
+        this.horaSalida  = null;
+        this.monto       = 0.0;
+    }
+
+    // Constructor completo (para reconstruir desde archivo)
+    public Vehiculo(String placa, String tipo, LocalTime horaEntrada,
+                    LocalTime horaSalida, double monto) {
+        this.placa       = placa;
+        this.tipo        = tipo;
+        this.horaEntrada = horaEntrada;
+        this.horaSalida  = horaSalida;
+        this.monto       = monto;
+    }
+
+    // ── Getters ──────────────────────────────────────────────────────────────
+
+    public String getPlaca()            { return placa; }
+    public String getTipo()             { return tipo; }
+    public LocalTime getHoraEntrada()   { return horaEntrada; }
+    public LocalTime getHoraSalida()    { return horaSalida; }
+    public double getMonto()            { return monto; }
+
+    // ── Setters ──────────────────────────────────────────────────────────────
+
+    public void setHoraSalida(LocalTime horaSalida) { this.horaSalida = horaSalida; }
+    public void setMonto(double monto)              { this.monto = monto; }
+
+    /** Indica si el vehículo aún está activo (sin salida registrada). */
+    public boolean estaActivo() {
+        return horaSalida == null;
+    }
+
+} // fin clase Vehiculo
+
+package AccesoADatos;
+
+/**
+ * Maneja la persistencia de registros del parqueo en Archivos.txt
+ * Formato de cada línea: placa;tipo;horaEntrada;horaSalida;monto
+ * horaSalida y monto quedan como "null" y "0.0" mientras el vehículo está activo.
+ * @author Ignacio CH
+ */
+import Entidades.Vehiculo;
+import java.io.*;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.List;
+
+public class CrearArchivo {
+
+    private static final String ARCHIVO   = "Archivos.txt";
+    private static final String SEPARADOR = ";";
+
+    /** Escribe TODA la lista al archivo (sobreescribe). */
+    public void guardarTodos(List<Vehiculo> vehiculos) {
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(ARCHIVO, false))) {
+            for (Vehiculo v : vehiculos) {
+                String salida = (v.getHoraSalida() == null) ? "null"
+                                                            : v.getHoraSalida().toString();
+                bw.write(
+                    v.getPlaca()            + SEPARADOR +
+                    v.getTipo()             + SEPARADOR +
+                    v.getHoraEntrada()      + SEPARADOR +
+                    salida                  + SEPARADOR +
+                    v.getMonto()
+                );
+                bw.newLine();
+            }
+        } catch (IOException e) {
+            System.err.println("Error al guardar archivo: " + e.getMessage());
+        }
+    }
+
+    /** Lee el archivo y reconstruye la lista de vehículos. */
+    public List<Vehiculo> leerTodos() {
+        List<Vehiculo> lista = new ArrayList<>();
+        File archivo = new File(ARCHIVO);
+
+        if (!archivo.exists()) return lista;
+
+        try (BufferedReader br = new BufferedReader(new FileReader(ARCHIVO))) {
+            String linea;
+            while ((linea = br.readLine()) != null) {
+                if (linea.trim().isEmpty()) continue;
+
+                String[] p = linea.split(SEPARADOR);
+                if (p.length == 5) {
+                    String    placa      = p[0].trim();
+                    String    tipo       = p[1].trim();
+                    LocalTime entrada    = LocalTime.parse(p[2].trim());
+                    LocalTime salida     = p[3].trim().equals("null") ? null
+                                          : LocalTime.parse(p[3].trim());
+                    double    monto      = Double.parseDouble(p[4].trim());
+
+                    lista.add(new Vehiculo(placa, tipo, entrada, salida, monto));
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error al leer archivo: " + e.getMessage());
+        }
+        return lista;
+    }
+
+} // fin clase CrearArchivo
+
+Entidades — Vehiculo.java
+
+package Logica;
+
+/**
+ * Capa de lógica de negocio del sistema de parqueo.
+ * Aplica validaciones, reglas de unicidad, cálculo de cobro
+ * y coordina con la capa de Acceso a Datos.
+ * @author Ignacio CH
+ */
+import AccesoADatos.CrearArchivo;
+import Entidades.Vehiculo;
+import java.time.LocalTime;
+import java.time.Duration;
+import java.util.List;
+import java.util.stream.Collectors;
+
+public class GestionParqueo {
+
+    private static final double TARIFA_POR_HORA = 500.0;
+
+    // Patrón: exactamente 6 dígitos  O  3 letras + 3 dígitos (ej: ABC123)
+    private static final String PATRON_PLACA =
+            "^[0-9]{6}$|^[A-Za-z]{3}[0-9]{3}$";
+
+    private final CrearArchivo dao;
+    private List<Vehiculo>     vehiculos; // caché en memoria
+
+    public GestionParqueo() {
+        this.dao      = new CrearArchivo();
+        this.vehiculos = dao.leerTodos(); // carga inicial desde archivo
+    }
+
+    // ── Validaciones ─────────────────────────────────────────────────────────
+
+    /**
+     * Valida que la placa cumpla con el formato permitido.
+     * @return true si es válida
+     */
+    public boolean placaValida(String placa) {
+        if (placa == null || placa.trim().isEmpty()) return false;
+        return placa.trim().toUpperCase().matches(PATRON_PLACA);
+    }
+
+    /**
+     * Verifica si ya existe un vehículo ACTIVO con esa placa (sin salida).
+     * @return true si la placa ya está dentro del parqueo
+     */
+    public boolean placaActiva(String placa) {
+        return vehiculos.stream()
+                .anyMatch(v -> v.getPlaca().equalsIgnoreCase(placa.trim())
+                            && v.estaActivo());
+    }
+
+    // ── Operaciones principales ───────────────────────────────────────────────
+
+    /**
+     * Registra la entrada de un vehículo.
+     * @param placa Placa del vehículo
+     * @param tipo  "Carro" o "Moto"
+     * @return Mensaje de resultado de la operación
+     */
+    public String registrarEntrada(String placa, String tipo) {
+        // Validar campos obligatorios
+        if (placa == null || placa.trim().isEmpty()) {
+            return "ERROR: La placa es obligatoria.";
+        }
+        if (tipo == null || tipo.trim().isEmpty()) {
+            return "ERROR: El tipo de vehículo es obligatorio.";
+        }
+
+        placa = placa.trim().toUpperCase();
+
+        // Validar formato de placa (Regla 3)
+        if (!placaValida(placa)) {
+            return "ERROR: Formato de placa inválido. "
+                 + "Debe ser 6 dígitos (123456) o 3 letras + 3 números (ABC123).";
+        }
+
+        // Validar unicidad (Regla 1)
+        if (placaActiva(placa)) {
+            return "ERROR: El vehículo con placa " + placa
+                 + " ya se encuentra en el parqueo.";
+        }
+
+        // Registrar con hora automática
+        Vehiculo v = new Vehiculo(placa, tipo.trim(), LocalTime.now());
+        vehiculos.add(v);
+        dao.guardarTodos(vehiculos);
+
+        return "OK: Entrada registrada para " + placa
+             + " (" + tipo + ") a las " + v.getHoraEntrada() + ".";
+    }
+
+    /**
+     * Registra la salida de un vehículo y calcula el monto.
+     * @param placa Placa del vehículo a retirar
+     * @return Mensaje con el monto a cobrar o error
+     */
+    public String registrarSalida(String placa) {
+        if (placa == null || placa.trim().isEmpty()) {
+            return "ERROR: La placa es obligatoria.";
+        }
+
+        placa = placa.trim().toUpperCase();
+
+        // Buscar vehículo activo con esa placa
+        Vehiculo objetivo = null;
+        for (Vehiculo v : vehiculos) {
+            if (v.getPlaca().equalsIgnoreCase(placa) && v.estaActivo()) {
+                objetivo = v;
+                break;
+            }
+        }
+
+        if (objetivo == null) {
+            return "ERROR: No se encontró un vehículo activo con placa " + placa + ".";
+        }
+
+        // Registrar salida y calcular cobro (Regla 2)
+        LocalTime horaSalida = LocalTime.now();
+        double monto = calcularMonto(objetivo.getHoraEntrada(), horaSalida);
+
+        objetivo.setHoraSalida(horaSalida);
+        objetivo.setMonto(monto);
+        dao.guardarTodos(vehiculos);
+
+        return String.format(
+            "OK: Salida de %s a las %s. Tiempo: %s. Monto a pagar: ₡%.0f",
+            placa, horaSalida,
+            formatearDuracion(objetivo.getHoraEntrada(), horaSalida),
+            monto
+        );
+    }
+
+    /**
+     * Elimina un registro del historial (solo vehículos con salida registrada).
+     * @param placa Placa del registro a eliminar
+     * @return Mensaje de resultado
+     */
+    public String eliminarHistorial(String placa) {
+        if (placa == null || placa.trim().isEmpty()) {
+            return "ERROR: La placa es obligatoria.";
+        }
+        placa = placa.trim().toUpperCase();
+        final String placaFinal = placa;
+
+        boolean eliminado = vehiculos.removeIf(
+            v -> v.getPlaca().equalsIgnoreCase(placaFinal) && !v.estaActivo()
+        );
+
+        if (!eliminado) {
+            return "ERROR: No se encontró registro histórico para la placa " + placa + ".";
+        }
+
+        dao.guardarTodos(vehiculos);
+        return "OK: Registro histórico de " + placa + " eliminado.";
+    }
+
+    // ── Consultas para la vista ───────────────────────────────────────────────
+
+    /** Devuelve solo los vehículos actualmente en el parqueo (sin salida). */
+    public List<Vehiculo> getVehiculosActivos() {
+        return vehiculos.stream()
+                .filter(Vehiculo::estaActivo)
+                .collect(Collectors.toList());
+    }
+
+    /** Devuelve el historial completo (vehículos que ya salieron). */
+    public List<Vehiculo> getHistorial() {
+        return vehiculos.stream()
+                .filter(v -> !v.estaActivo())
+                .collect(Collectors.toList());
+    }
+
+    // ── Cálculos internos ─────────────────────────────────────────────────────
+
+    /**
+     * Calcula el monto a pagar: 500 por hora o fracción (Regla 2).
+     */
+    private double calcularMonto(LocalTime entrada, LocalTime salida) {
+        long minutos = Duration.between(entrada, salida).toMinutes();
+        if (minutos < 0) minutos = 0; // por si cruza medianoche (edge case)
+        long horas = (long) Math.ceil(minutos / 60.0); // fracción cuenta como hora
+        if (horas == 0) horas = 1; // mínimo 1 hora
+        return horas * TARIFA_POR_HORA;
+    }
+
+    /** Devuelve la duración formateada como "Xh Ym". */
+    private String formatearDuracion(LocalTime entrada, LocalTime salida) {
+        long minutos = Duration.between(entrada, salida).toMinutes();
+        if (minutos < 0) minutos = 0;
+        return (minutos / 60) + "h " + (minutos % 60) + "m";
+    }
+
+} // fin clase GestionParqueo
+
+Resultado: Se implementa correcciones a Registros. 
+
+Y se cuestiona cosas de public class CrearArchivo. 
+
+Prompt 2: Aplique los cambios de vehiculo a registros. Registros se encuentra en  entidades. 
+
+            for (Registro v : vehiculos) {
+                String salida = (v.getHoraSalida() == null) ? "null"
+                                                            : v.getHoraSalida().toString();
+                bw.write(
+                    v.getPlaca()            + SEPARADOR +
+                    v.getTipo()             + SEPARADOR +
+                    v.getHoraEntrada()      + SEPARADOR +
+                    salida                  + SEPARADOR +
+                    v.getMonto()
+                );
+                bw.newLine();
+            }
+
+como funciona ese for, nunca he visto un for "?"
+
+Salida:
+*Se repite el registro.java se omite*
+Y en CrearArchivo.java y GestionParqueo.java simplemente cambia toda referencia de Vehiculo → Registro y el import de Entidades.Vehiculo → Entidades.Registro.
+2. ¿Cómo funciona ese for con ?
+Ese ? no es parte del for, es el operador ternario. Son dos cosas separadas. Miremos la línea en cuestión:
+String salida = (v.getHoraSalida() == null) ? "null" : v.getHoraSalida().toString();
+Estructura del operador ternario
+resultado = (condición) ? valor_si_verdadero : valor_si_falso;
+
+Es exactamente equivalente a escribir este if/else:
+String salida;
+if (v.getHoraSalida() == null) {
+    salida = "null";
+} else {
+    salida = v.getHoraSalida().toString();
+}
+
+¿Por qué se usa aquí?
+Cuando un vehículo aún está en el parqueo, horaSalida vale null (no existe aún). Si intentáramos llamar .toString() directamente sobre null, el programa lanzaría un NullPointerException y se caería. El ternario protege contra eso:
+Estado del vehículo getHoraSalida() Lo que graba en el archivo
+Sigue en parqueo null el texto "null" Ya salióLocalTime (ej: 14:30)"14:30"
+
+Luego al leer el archivo, CrearArchivo hace el proceso inverso:
+LocalTime salida = p[3].trim().equals("null") ? null : LocalTime.parse(p[3].trim());
+
+Si encuentra el texto "null" → asigna null. Si encuentra una hora → la convierte a LocalTime.
+Resultado:
+Se aplica el for con operador ternario, debido a que horaSalida es null.
+
+Prompt 3: 
+Vamos con la ultima capa. 
+package Presentacion;
+/**
+ * @author Ignacio CH
+ */
+import Entidades.Registro;
+import Logica.GestionParqueo;
+
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.util.List;
+
+public class App extends JFrame {
+
+    // Lógica de negocio — única dependencia permitida desde Presentación
+    private final GestionParqueo gestion = new GestionParqueo();
+
+    // ── Componentes pestaña Entrada ──────────────────────────────────────────
+    private JTextField txtPlacaEntrada;
+    private JComboBox<String> cmbTipo;
+    private JButton btnRegistrarEntrada;
+    private JLabel lblMensajeEntrada;
+
+    // ── Componentes pestaña Salida ───────────────────────────────────────────
+    private JTextField txtPlacaSalida;
+    private JButton btnRegistrarSalida;
+    private JLabel lblMensajeSalida;
+
+    // ── Componentes pestaña Parqueo actual ───────────────────────────────────
+    private JTable tablaActivos;
+    private DefaultTableModel modeloActivos;
+
+    // ── Componentes pestaña Historial ────────────────────────────────────────
+    private JTable tablaHistorial;
+    private DefaultTableModel modeloHistorial;
+    private JTextField txtPlacaEliminar;
+    private JButton btnEliminar;
+    private JLabel lblMensajeHistorial;
+
+    // ── Constructor ──────────────────────────────────────────────────────────
+    public App() {
+        setTitle("Sistema de Parqueo Público");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(700, 480);
+        setLocationRelativeTo(null); // centrar en pantalla
+        setResizable(false);
+
+        JTabbedPane pestanas = new JTabbedPane();
+        pestanas.addTab("Entrada",        buildPanelEntrada());
+        pestanas.addTab("Salida",         buildPanelSalida());
+        pestanas.addTab("Parqueo Actual", buildPanelActivos());
+        pestanas.addTab("Historial",      buildPanelHistorial());
+
+        // Cada vez que se cambia de pestaña se recargan las tablas
+        pestanas.addChangeListener(e -> {
+            refrescarTablaActivos();
+            refrescarTablaHistorial();
+        });
+
+        add(pestanas);
+    }
+
+    // ── Panel: Registro de Entrada ───────────────────────────────────────────
+    private JPanel buildPanelEntrada() {
+        JPanel panel = new JPanel(new GridBagLayout());
+        GridBagConstraints g = new GridBagConstraints();
+        g.insets = new Insets(8, 8, 8, 8);
+        g.anchor = GridBagConstraints.WEST;
+
+        // Título
+        g.gridx = 0; g.gridy = 0; g.gridwidth = 2;
+        JLabel titulo = new JLabel("Registro de Entrada");
+        titulo.setFont(new Font("SansSerif", Font.BOLD, 16));
+        panel.add(titulo, g);
+
+        // Placa
+        g.gridwidth = 1;
+        g.gridx = 0; g.gridy = 1;
+        panel.add(new JLabel("Placa:"), g);
+        g.gridx = 1;
+        txtPlacaEntrada = new JTextField(15);
+        panel.add(txtPlacaEntrada, g);
+
+        // Tipo
+        g.gridx = 0; g.gridy = 2;
+        panel.add(new JLabel("Tipo:"), g);
+        g.gridx = 1;
+        cmbTipo = new JComboBox<>(new String[]{"Carro", "Moto"});
+        panel.add(cmbTipo, g);
+
+        // Botón
+        g.gridx = 1; g.gridy = 3;
+        btnRegistrarEntrada = new JButton("Registrar Entrada");
+        panel.add(btnRegistrarEntrada, g);
+
+        // Mensaje resultado
+        g.gridx = 0; g.gridy = 4; g.gridwidth = 2;
+        lblMensajeEntrada = new JLabel(" ");
+        lblMensajeEntrada.setFont(new Font("SansSerif", Font.ITALIC, 12));
+        panel.add(lblMensajeEntrada, g);
+
+        // Acción del botón
+        btnRegistrarEntrada.addActionListener(e -> {
+            String placa = txtPlacaEntrada.getText();
+            String tipo  = (String) cmbTipo.getSelectedItem();
+            String resultado = gestion.registrarEntrada(placa, tipo);
+            mostrarMensaje(lblMensajeEntrada, resultado);
+            if (resultado.startsWith("OK")) {
+                txtPlacaEntrada.setText("");
+            }
+        });
+
+        return panel;
+    }
+
+    // ── Panel: Registro de Salida ────────────────────────────────────────────
+    private JPanel buildPanelSalida() {
+        JPanel panel = new JPanel(new GridBagLayout());
+        GridBagConstraints g = new GridBagConstraints();
+        g.insets = new Insets(8, 8, 8, 8);
+        g.anchor = GridBagConstraints.WEST;
+
+        // Título
+        g.gridx = 0; g.gridy = 0; g.gridwidth = 2;
+        JLabel titulo = new JLabel("Registro de Salida");
+        titulo.setFont(new Font("SansSerif", Font.BOLD, 16));
+        panel.add(titulo, g);
+
+        // Placa
+        g.gridwidth = 1;
+        g.gridx = 0; g.gridy = 1;
+        panel.add(new JLabel("Placa:"), g);
+        g.gridx = 1;
+        txtPlacaSalida = new JTextField(15);
+        panel.add(txtPlacaSalida, g);
+
+        // Botón
+        g.gridx = 1; g.gridy = 2;
+        btnRegistrarSalida = new JButton("Registrar Salida");
+        panel.add(btnRegistrarSalida, g);
+
+        // Mensaje resultado
+        g.gridx = 0; g.gridy = 3; g.gridwidth = 2;
+        lblMensajeSalida = new JLabel(" ");
+        lblMensajeSalida.setFont(new Font("SansSerif", Font.ITALIC, 12));
+        panel.add(lblMensajeSalida, g);
+
+        // Acción del botón
+        btnRegistrarSalida.addActionListener(e -> {
+            String placa    = txtPlacaSalida.getText();
+            String resultado = gestion.registrarSalida(placa);
+            mostrarMensaje(lblMensajeSalida, resultado);
+            if (resultado.startsWith("OK")) {
+                txtPlacaSalida.setText("");
+                refrescarTablaActivos();
+                refrescarTablaHistorial();
+            }
+        });
+
+        return panel;
+    }
+
+    // ── Panel: Vehículos actualmente en el parqueo ───────────────────────────
+    private JPanel buildPanelActivos() {
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        JLabel titulo = new JLabel("Vehículos en el Parqueo");
+        titulo.setFont(new Font("SansSerif", Font.BOLD, 16));
+        panel.add(titulo, BorderLayout.NORTH);
+
+        // Columnas: Placa | Tipo | Hora Entrada
+        modeloActivos = new DefaultTableModel(
+            new String[]{"Placa", "Tipo", "Hora Entrada"}, 0
+        ) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
+
+        tablaActivos = new JTable(modeloActivos);
+        tablaActivos.setRowHeight(24);
+        tablaActivos.getTableHeader().setReorderingAllowed(false);
+        panel.add(new JScrollPane(tablaActivos), BorderLayout.CENTER);
+
+        // Botón refrescar manual
+        JButton btnRefrescar = new JButton("Refrescar");
+        btnRefrescar.addActionListener(e -> refrescarTablaActivos());
+        JPanel sur = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        sur.add(btnRefrescar);
+        panel.add(sur, BorderLayout.SOUTH);
+
+        return panel;
+    }
+
+    // ── Panel: Historial ─────────────────────────────────────────────────────
+    private JPanel buildPanelHistorial() {
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        JLabel titulo = new JLabel("Historial de Vehículos");
+        titulo.setFont(new Font("SansSerif", Font.BOLD, 16));
+        panel.add(titulo, BorderLayout.NORTH);
+
+        // Columnas: Placa | Tipo | Entrada | Salida | Monto
+        modeloHistorial = new DefaultTableModel(
+            new String[]{"Placa", "Tipo", "Hora Entrada", "Hora Salida", "Monto (₡)"}, 0
+        ) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
+
+        tablaHistorial = new JTable(modeloHistorial);
+        tablaHistorial.setRowHeight(24);
+        tablaHistorial.getTableHeader().setReorderingAllowed(false);
+        panel.add(new JScrollPane(tablaHistorial), BorderLayout.CENTER);
+
+        // Panel inferior: campo placa + botón eliminar + mensaje
+        JPanel sur = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        sur.add(new JLabel("Placa a eliminar:"));
+        txtPlacaEliminar = new JTextField(10);
+        sur.add(txtPlacaEliminar);
+        btnEliminar = new JButton("Eliminar Registro");
+        sur.add(btnEliminar);
+        lblMensajeHistorial = new JLabel(" ");
+        lblMensajeHistorial.setFont(new Font("SansSerif", Font.ITALIC, 12));
+        sur.add(lblMensajeHistorial);
+        panel.add(sur, BorderLayout.SOUTH);
+
+        // Clic en fila → autocompleta el campo de placa
+        tablaHistorial.getSelectionModel().addListSelectionListener(e -> {
+            int fila = tablaHistorial.getSelectedRow();
+            if (fila >= 0) {
+                txtPlacaEliminar.setText(
+                    modeloHistorial.getValueAt(fila, 0).toString()
+                );
+            }
+        });
+
+        // Acción eliminar
+        btnEliminar.addActionListener(e -> {
+            String placa    = txtPlacaEliminar.getText();
+            String resultado = gestion.eliminarHistorial(placa);
+            mostrarMensaje(lblMensajeHistorial, resultado);
+            if (resultado.startsWith("OK")) {
+                txtPlacaEliminar.setText("");
+                refrescarTablaHistorial();
+            }
+        });
+
+        return panel;
+    }
+
+    // ── Refrescar tablas ─────────────────────────────────────────────────────
+
+    private void refrescarTablaActivos() {
+        modeloActivos.setRowCount(0); // limpiar filas
+        List<Registro> activos = gestion.getVehiculosActivos();
+        for (Registro v : activos) {
+            modeloActivos.addRow(new Object[]{
+                v.getPlaca(),
+                v.getTipo(),
+                v.getHoraEntrada()
+            });
+        }
+    }
+
+    private void refrescarTablaHistorial() {
+        modeloHistorial.setRowCount(0); // limpiar filas
+        List<Registro> historial = gestion.getHistorial();
+        for (Registro v : historial) {
+            modeloHistorial.addRow(new Object[]{
+                v.getPlaca(),
+                v.getTipo(),
+                v.getHoraEntrada(),
+                v.getHoraSalida(),
+                String.format("%.0f", v.getMonto())
+            });
+        }
+    }
+
+    // ── Utilidad: colorear mensaje OK/ERROR ──────────────────────────────────
+    private void mostrarMensaje(JLabel label, String mensaje) {
+        label.setText(mensaje);
+        if (mensaje.startsWith("OK")) {
+            label.setForeground(new Color(0, 130, 0)); // verde
+        } else {
+            label.setForeground(Color.RED);
+        }
+    }
+
+    // ── Main ─────────────────────────────────────────────────────────────────
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            App ventana = new App();
+            ventana.setVisible(true);
+        });
+    }
+
+} // fin clase App
+
+
+Salida 
+
+run:
+Exception in thread "AWT-EventQueue-0" java.lang.RuntimeException: Uncompilable code - no suitable constructor found for Registro(java.lang.String,java.lang.String,java.time.LocalTime)
+    constructor Entidades.Registro.Registro(java.lang.String,java.lang.String,java.time.LocalTime,double) is not applicable
+      (actual and formal argument lists differ in length)
+    constructor Entidades.Registro.Registro(java.lang.String,java.lang.String,java.time.LocalTime,java.time.LocalTime,double) is not applicable
+      (actual and formal argument lists differ in length)
+	at Logica.GestionParqueo.registrarEntrada(GestionParqueo.java:1)
+	at Presentacion.App.lambda$buildPanelEntrada$1(App.java:106)
+	at java.desktop/javax.swing.AbstractButton.fireActionPerformed(AbstractButton.java:1972)
+	at java.desktop/javax.swing.AbstractButton$Handler.actionPerformed(AbstractButton.java:2314)
+	at java.desktop/javax.swing.DefaultButtonModel.fireActionPerformed(DefaultButtonModel.java:407)
+	at java.desktop/javax.swing.DefaultButtonModel.setPressed(DefaultButtonModel.java:262)
+	at java.desktop/javax.swing.plaf.basic.BasicButtonListener.mouseReleased(BasicButtonListener.java:279)
+	at java.desktop/java.awt.Component.processMouseEvent(Component.java:6621)
+	at java.desktop/javax.swing.JComponent.processMouseEvent(JComponent.java:3398)
+	at java.desktop/java.awt.Component.processEvent(Component.java:6386)
+	at java.desktop/java.awt.Container.processEvent(Container.java:2266)
+	at java.desktop/java.awt.Component.dispatchEventImpl(Component.java:4996)
+	at java.desktop/java.awt.Container.dispatchEventImpl(Container.java:2324)
+	at java.desktop/java.awt.Component.dispatchEvent(Component.java:4828)
+	at java.desktop/java.awt.LightweightDispatcher.retargetMouseEvent(Container.java:4948)
+	at java.desktop/java.awt.LightweightDispatcher.processMouseEvent(Container.java:4575)
+	at java.desktop/java.awt.LightweightDispatcher.dispatchEvent(Container.java:4516)
+	at java.desktop/java.awt.Container.dispatchEventImpl(Container.java:2310)
+	at java.desktop/java.awt.Window.dispatchEventImpl(Window.java:2780)
+	at java.desktop/java.awt.Component.dispatchEvent(Component.java:4828)
+	at java.desktop/java.awt.EventQueue.dispatchEventImpl(EventQueue.java:775)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:720)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:714)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:400)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:87)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:98)
+	at java.desktop/java.awt.EventQueue$5.run(EventQueue.java:747)
+	at java.desktop/java.awt.EventQueue$5.run(EventQueue.java:745)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:400)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:87)
+	at java.desktop/java.awt.EventQueue.dispatchEvent(EventQueue.java:744)
+	at java.desktop/java.awt.EventDispatchThread.pumpOneEventForFilters(EventDispatchThread.java:203)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForFilter(EventDispatchThread.java:124)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForHierarchy(EventDispatchThread.java:113)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:109)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:101)
+	at java.desktop/java.awt.EventDispatchThread.run(EventDispatchThread.java:90)
+Exception in thread "AWT-EventQueue-0" java.lang.RuntimeException: Uncompilable code - no suitable constructor found for Registro(java.lang.String,java.lang.String,java.time.LocalTime)
+    constructor Entidades.Registro.Registro(java.lang.String,java.lang.String,java.time.LocalTime,double) is not applicable
+      (actual and formal argument lists differ in length)
+    constructor Entidades.Registro.Registro(java.lang.String,java.lang.String,java.time.LocalTime,java.time.LocalTime,double) is not applicable
+      (actual and formal argument lists differ in length)
+	at Logica.GestionParqueo.registrarEntrada(GestionParqueo.java:1)
+	at Presentacion.App.lambda$buildPanelEntrada$1(App.java:106)
+	at java.desktop/javax.swing.AbstractButton.fireActionPerformed(AbstractButton.java:1972)
+	at java.desktop/javax.swing.AbstractButton$Handler.actionPerformed(AbstractButton.java:2314)
+	at java.desktop/javax.swing.DefaultButtonModel.fireActionPerformed(DefaultButtonModel.java:407)
+	at java.desktop/javax.swing.DefaultButtonModel.setPressed(DefaultButtonModel.java:262)
+	at java.desktop/javax.swing.plaf.basic.BasicButtonListener.mouseReleased(BasicButtonListener.java:279)
+	at java.desktop/java.awt.Component.processMouseEvent(Component.java:6621)
+	at java.desktop/javax.swing.JComponent.processMouseEvent(JComponent.java:3398)
+	at java.desktop/java.awt.Component.processEvent(Component.java:6386)
+	at java.desktop/java.awt.Container.processEvent(Container.java:2266)
+	at java.desktop/java.awt.Component.dispatchEventImpl(Component.java:4996)
+	at java.desktop/java.awt.Container.dispatchEventImpl(Container.java:2324)
+	at java.desktop/java.awt.Component.dispatchEvent(Component.java:4828)
+	at java.desktop/java.awt.LightweightDispatcher.retargetMouseEvent(Container.java:4948)
+	at java.desktop/java.awt.LightweightDispatcher.processMouseEvent(Container.java:4575)
+	at java.desktop/java.awt.LightweightDispatcher.dispatchEvent(Container.java:4516)
+	at java.desktop/java.awt.Container.dispatchEventImpl(Container.java:2310)
+	at java.desktop/java.awt.Window.dispatchEventImpl(Window.java:2780)
+	at java.desktop/java.awt.Component.dispatchEvent(Component.java:4828)
+	at java.desktop/java.awt.EventQueue.dispatchEventImpl(EventQueue.java:775)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:720)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:714)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:400)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:87)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:98)
+	at java.desktop/java.awt.EventQueue$5.run(EventQueue.java:747)
+	at java.desktop/java.awt.EventQueue$5.run(EventQueue.java:745)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:400)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:87)
+	at java.desktop/java.awt.EventQueue.dispatchEvent(EventQueue.java:744)
+	at java.desktop/java.awt.EventDispatchThread.pumpOneEventForFilters(EventDispatchThread.java:203)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForFilter(EventDispatchThread.java:124)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForHierarchy(EventDispatchThread.java:113)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:109)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:101)
+	at java.desktop/java.awt.EventDispatchThread.run(EventDispatchThread.java:90)
+Exception in thread "AWT-EventQueue-0" java.lang.RuntimeException: Uncompilable code - no suitable constructor found for Registro(java.lang.String,java.lang.String,java.time.LocalTime)
+    constructor Entidades.Registro.Registro(java.lang.String,java.lang.String,java.time.LocalTime,double) is not applicable
+      (actual and formal argument lists differ in length)
+    constructor Entidades.Registro.Registro(java.lang.String,java.lang.String,java.time.LocalTime,java.time.LocalTime,double) is not applicable
+      (actual and formal argument lists differ in length)
+	at Logica.GestionParqueo.registrarEntrada(GestionParqueo.java:1)
+	at Presentacion.App.lambda$buildPanelEntrada$1(App.java:106)
+	at java.desktop/javax.swing.AbstractButton.fireActionPerformed(AbstractButton.java:1972)
+	at java.desktop/javax.swing.AbstractButton$Handler.actionPerformed(AbstractButton.java:2314)
+	at java.desktop/javax.swing.DefaultButtonModel.fireActionPerformed(DefaultButtonModel.java:407)
+	at java.desktop/javax.swing.DefaultButtonModel.setPressed(DefaultButtonModel.java:262)
+	at java.desktop/javax.swing.plaf.basic.BasicButtonListener.mouseReleased(BasicButtonListener.java:279)
+	at java.desktop/java.awt.Component.processMouseEvent(Component.java:6621)
+	at java.desktop/javax.swing.JComponent.processMouseEvent(JComponent.java:3398)
+	at java.desktop/java.awt.Component.processEvent(Component.java:6386)
+	at java.desktop/java.awt.Container.processEvent(Container.java:2266)
+	at java.desktop/java.awt.Component.dispatchEventImpl(Component.java:4996)
+	at java.desktop/java.awt.Container.dispatchEventImpl(Container.java:2324)
+	at java.desktop/java.awt.Component.dispatchEvent(Component.java:4828)
+	at java.desktop/java.awt.LightweightDispatcher.retargetMouseEvent(Container.java:4948)
+	at java.desktop/java.awt.LightweightDispatcher.processMouseEvent(Container.java:4575)
+	at java.desktop/java.awt.LightweightDispatcher.dispatchEvent(Container.java:4516)
+	at java.desktop/java.awt.Container.dispatchEventImpl(Container.java:2310)
+	at java.desktop/java.awt.Window.dispatchEventImpl(Window.java:2780)
+	at java.desktop/java.awt.Component.dispatchEvent(Component.java:4828)
+	at java.desktop/java.awt.EventQueue.dispatchEventImpl(EventQueue.java:775)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:720)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:714)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:400)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:87)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:98)
+	at java.desktop/java.awt.EventQueue$5.run(EventQueue.java:747)
+	at java.desktop/java.awt.EventQueue$5.run(EventQueue.java:745)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:400)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:87)
+	at java.desktop/java.awt.EventQueue.dispatchEvent(EventQueue.java:744)
+	at java.desktop/java.awt.EventDispatchThread.pumpOneEventForFilters(EventDispatchThread.java:203)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForFilter(EventDispatchThread.java:124)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForHierarchy(EventDispatchThread.java:113)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:109)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:101)
+	at java.desktop/java.awt.EventDispatchThread.run(EventDispatchThread.java:90)
+Exception in thread "AWT-EventQueue-0" java.lang.RuntimeException: Uncompilable code - no suitable constructor found for Registro(java.lang.String,java.lang.String,java.time.LocalTime)
+    constructor Entidades.Registro.Registro(java.lang.String,java.lang.String,java.time.LocalTime,double) is not applicable
+      (actual and formal argument lists differ in length)
+    constructor Entidades.Registro.Registro(java.lang.String,java.lang.String,java.time.LocalTime,java.time.LocalTime,double) is not applicable
+      (actual and formal argument lists differ in length)
+	at Logica.GestionParqueo.registrarEntrada(GestionParqueo.java:1)
+	at Presentacion.App.lambda$buildPanelEntrada$1(App.java:106)
+	at java.desktop/javax.swing.AbstractButton.fireActionPerformed(AbstractButton.java:1972)
+	at java.desktop/javax.swing.AbstractButton$Handler.actionPerformed(AbstractButton.java:2314)
+	at java.desktop/javax.swing.DefaultButtonModel.fireActionPerformed(DefaultButtonModel.java:407)
+	at java.desktop/javax.swing.DefaultButtonModel.setPressed(DefaultButtonModel.java:262)
+	at java.desktop/javax.swing.plaf.basic.BasicButtonListener.mouseReleased(BasicButtonListener.java:279)
+	at java.desktop/java.awt.Component.processMouseEvent(Component.java:6621)
+	at java.desktop/javax.swing.JComponent.processMouseEvent(JComponent.java:3398)
+	at java.desktop/java.awt.Component.processEvent(Component.java:6386)
+	at java.desktop/java.awt.Container.processEvent(Container.java:2266)
+	at java.desktop/java.awt.Component.dispatchEventImpl(Component.java:4996)
+	at java.desktop/java.awt.Container.dispatchEventImpl(Container.java:2324)
+	at java.desktop/java.awt.Component.dispatchEvent(Component.java:4828)
+	at java.desktop/java.awt.LightweightDispatcher.retargetMouseEvent(Container.java:4948)
+	at java.desktop/java.awt.LightweightDispatcher.processMouseEvent(Container.java:4575)
+	at java.desktop/java.awt.LightweightDispatcher.dispatchEvent(Container.java:4516)
+	at java.desktop/java.awt.Container.dispatchEventImpl(Container.java:2310)
+	at java.desktop/java.awt.Window.dispatchEventImpl(Window.java:2780)
+	at java.desktop/java.awt.Component.dispatchEvent(Component.java:4828)
+	at java.desktop/java.awt.EventQueue.dispatchEventImpl(EventQueue.java:775)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:720)
+	at java.desktop/java.awt.EventQueue$4.run(EventQueue.java:714)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:400)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:87)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:98)
+	at java.desktop/java.awt.EventQueue$5.run(EventQueue.java:747)
+	at java.desktop/java.awt.EventQueue$5.run(EventQueue.java:745)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:400)
+	at java.base/java.security.ProtectionDomain$JavaSecurityAccessImpl.doIntersectionPrivilege(ProtectionDomain.java:87)
+	at java.desktop/java.awt.EventQueue.dispatchEvent(EventQueue.java:744)
+	at java.desktop/java.awt.EventDispatchThread.pumpOneEventForFilters(EventDispatchThread.java:203)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForFilter(EventDispatchThread.java:124)
+	at java.desktop/java.awt.EventDispatchThread.pumpEventsForHierarchy(EventDispatchThread.java:113)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:109)
+	at java.desktop/java.awt.EventDispatchThread.pumpEvents(EventDispatchThread.java:101)
+	at java.desktop/java.awt.EventDispatchThread.run(EventDispatchThread.java:90)
+BUILD SUCCESSFUL (total time: 36 seconds)
+
+
+
+
+PROMPT 4:
+El error que estás experimentando, "java.lang.RuntimeException: Uncompilable code - no suitable constructor found for Registro...", se debe a una inconsistencia entre los constructores definidos en la clase Registro.java y cómo se están intentando usar en GestionParqueo.java.
+
+Debes agregar un constructor de 3 parámetros (tipo, placa, hora de entrada) para que el método registrarEntrada funcione. También he ordenado los parámetros para que sean consistentes con tus otros archivos.
+
+package Entidades;
+
+import java.time.LocalTime;
+
+public class Registro {
+
+    private String tipo, placa;
+    private LocalTime horaEntrada, horaSalida;
+    private double monto;
+
+    // --- NUEVO CONSTRUCTOR (Para registros nuevos de entrada) ---
+    // Este es el que faltaba y causaba el error en GestionParqueo
+    public Registro(String tipo, String placa, LocalTime horaEntrada) {
+        this.tipo = tipo;
+        this.placa = placa;
+        this.horaEntrada = horaEntrada;
+        this.horaSalida = null;
+        this.monto = 0.0;
+    }
+
+    // Constructor para archivos (5 parámetros)
+    // Se usa en CrearArchivo.java para reconstruir los datos guardados
+    public Registro(String tipo, String placa, LocalTime horaEntrada,
+                    LocalTime horaSalida, double monto) {
+        this.tipo        = tipo;
+        this.placa       = placa;
+        this.horaEntrada = horaEntrada;
+        this.horaSalida  = horaSalida;
+        this.monto       = monto;
+    }
+
+    // Setters
+    public void setTipo(String tipo) { this.tipo = tipo; }
+    public void setPlaca(String placa) { this.placa = placa; }
+    public void setHoraSalida(LocalTime horaSalida) { this.horaSalida = horaSalida; }
+    public void setMonto(double monto) { this.monto = monto; }
+
+    // Getters
+    public String getTipo() { return tipo; }
+    public String getPlaca() { return placa; }
+    public LocalTime getHoraEntrada() { return horaEntrada; }
+    public LocalTime getHoraSalida() { return horaSalida; }
+    public double getMonto() { return monto; }
+
+    // Estado del vehículo
+    public boolean estaActivo() {
+        return horaSalida == null;
+    }
+}
+
+// Dentro del método leerTodos() de CrearArchivo.java
+if (p.length == 5) {
+    String    tipo    = p[0].trim();
+    String    placa   = p[1].trim();
+    LocalTime entrada = LocalTime.parse(p[2].trim());
+    LocalTime salida  = p[3].trim().equals("null") ? null : LocalTime.parse(p[3].trim());
+    double    monto   = Double.parseDouble(p[4].trim());
+
+    // Usa el constructor completo que ya tienes definido
+    lista.add(new Registro(tipo, placa, entrada, salida, monto)); 
+}
+
+
+Las horas aparecen como 19:38:23.5348564314
+como quito los últimos números
+
+ Las horas aparecen como 19:38:23.5348564314
+
+como quito los últimos numeros
+
+Para eliminar los nanosegundos (esos números adicionales después de los segundos) en Java, tienes dos caminos: truncar el tiempo al momento de crearlo o darle formato solo al mostrarlo en la tabla.
+
+Aquí tienes las mejores opciones para tu código:
+1. Truncar los segundos en la Lógica (GestionParqueo.java)
+
+Esta es la opción más limpia porque evita que los nanosegundos se guarden en el archivo Archivos.txt desde el principio. Debes importar java.time.temporal.ChronoUnit.
+
+Modifica el método registrarEntrada y la lógica de la salida:
+Java
+
+import java.time.temporal.ChronoUnit; // Agregar este import
+
+// ... dentro de registrarEntrada ...
+// Trunca el tiempo para que solo guarde hasta los segundos
+Registro nuevo = new Registro(tipo.trim(), placa, LocalTime.now().truncatedTo(ChronoUnit.SECONDS));
+
+// ... dentro de registrarSalida ...
+LocalTime horaSalida = LocalTime.now().truncatedTo(ChronoUnit.SECONDS);
+
+2. Dar formato en la Interfaz (App.java)
+
+Si prefieres que los datos se guarden con precisión total pero se vean "limpios" en la tabla, debes usar un DateTimeFormatter en tu clase App.
+
+En los métodos de refrescar tablas, haz lo siguiente:
+Java
+
+import java.time.format.DateTimeFormatter; // Importar
+
+// Crea un formateador (ejemplo: HH:mm:ss o HH:mm)
+private final DateTimeFormatter formateador = DateTimeFormatter.ofPattern("HH:mm:ss");
+
+private void refrescarTablaActivos() {
+    modeloActivos.setRowCount(0);
+    List<Registro> activos = gestion.getVehiculosActivos();
+    for (Registro v : activos) {
+        modeloActivos.addRow(new Object[]{
+            v.getPlaca(),
+            v.getTipo(),
+            v.getHoraEntrada().format(formateador) // Aplicar formato aquí
+        });
+    }
+}
+
+private void refrescarTablaHistorial() {
+    modeloHistorial.setRowCount(0);
+    List<Registro> historial = gestion.getHistorial();
+    for (Registro v : historial) {
+        // La salida puede ser null, hay que validar antes de formatear
+        String salidaFormateada = (v.getHoraSalida() != null) 
+                                  ? v.getHoraSalida().format(formateador) 
+                                  : "";
+
+        modeloHistorial.addRow(new Object[]{
+            v.getPlaca(),
+            v.getTipo(),
+            v.getHoraEntrada().format(formateador),
+            salidaFormateada,
+            String.format("%.0f", v.getMonto())
+        });
+    }
+}
+
+¿Cuál elegir?
+
+    Usa la Opción 1 (Truncar) si no necesitas precisión de milisegundos para nada. Hará que tu archivo de texto sea más fácil de leer.
+
+    Usa la Opción 2 (Formatear) si quieres un control total sobre cómo se ve (por ejemplo, si solo quieres mostrar horas y minutos "19:38" sin los segundos).
+
+Se implementa la opción. 1
